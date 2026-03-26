@@ -1,0 +1,1313 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Phillip Wang - Truce Zone</title>
+    <style>
+      :root{
+        --deep:#001a33;
+        --deep2:#000f26;
+        --glass: rgba(255,255,255,.08);
+        --glass2: rgba(255,255,255,.14);
+        --line: rgba(255,255,255,.18);
+        --text: rgba(255,255,255,.92);
+        --muted: rgba(255,255,255,.72);
+        --gold: #d7b65a;
+        --gold2:#f1d48a;
+        --good:#38e9a5;
+        --bad:#ff4d6d;
+        --neutral:#7fb7ff;
+        --shadow: 0 18px 60px rgba(0,0,0,.45);
+        --radius: 20px;
+        --focus: 0 0 0 3px rgba(127,183,255,.35);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body{
+        margin:0;
+        background: radial-gradient(1200px 700px at 50% 25%, rgba(0,122,255,.22), transparent 60%),
+                    linear-gradient(180deg, var(--deep), var(--deep2));
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", "Noto Sans JP", "Yu Gothic", "Hiragino Sans", "Microsoft JhengHei", sans-serif;
+        overflow: hidden; /* full-screen canvas, avoid scroll */
+      }
+
+      #app{
+        position: relative;
+        width: 100%;
+        height: 100%;
+        touch-action: none; /* avoid mobile browser gesture interference */
+      }
+
+      /* Background canvas */
+      #bgCanvas{
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+
+      /* HUD and overlays */
+      .hud{
+        position: fixed;
+        top: 14px;
+        right: 14px;
+        z-index: 3;
+        width: min(420px, calc(100vw - 28px));
+        display:flex;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none; /* buttons re-enable below */
+      }
+
+      .hud .panel{
+        pointer-events: auto;
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+        border: 1px solid rgba(255,255,255,.16);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 10px 50px rgba(0,0,0,.30);
+        overflow:hidden;
+      }
+
+      .hud .stats{
+        padding: 12px 14px 10px;
+        display:flex;
+        gap: 14px;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+
+      .stat{
+        display:flex;
+        gap: 8px;
+        align-items: baseline;
+        white-space: nowrap;
+      }
+      .stat .label{
+        font-size: 12px;
+        letter-spacing: .08em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      .stat .value{
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .hud .actions{
+        padding: 10px 14px 14px;
+        display:flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      button{
+        font: inherit;
+        color: var(--text);
+        border: 1px solid rgba(255,255,255,.18);
+        background: rgba(255,255,255,.07);
+        border-radius: 12px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: transform .08s ease, background .2s ease, border-color .2s ease, opacity .2s ease;
+        -webkit-tap-highlight-color: transparent;
+      }
+      button:active{ transform: translateY(1px); }
+      button:focus-visible{ outline: none; box-shadow: var(--focus); }
+      button.primary{
+        background: linear-gradient(180deg, rgba(127,183,255,.25), rgba(127,183,255,.12));
+        border-color: rgba(127,183,255,.35);
+      }
+      button.ghost{
+        background: rgba(255,255,255,.05);
+      }
+      button[disabled]{ opacity:.55; cursor:not-allowed; }
+
+      /* Language switcher */
+      .lang-switch{
+        position: fixed;
+        top: 14px;
+        left: 14px;
+        z-index: 3;
+        display:flex;
+        gap: 8px;
+      }
+      .lang-switch button{
+        padding: 9px 10px;
+        border-radius: 12px;
+        background: rgba(255,255,255,.06);
+      }
+      .lang-switch button.active{
+        background: rgba(127,183,255,.20);
+        border-color: rgba(127,183,255,.40);
+      }
+
+      /* Center card */
+      .cardWrap{
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+        display:flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        pointer-events: none; /* inner elements set to auto */
+      }
+
+      .card{
+        pointer-events: auto;
+        width: min(520px, 92vw);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+        border: 1px solid rgba(255,255,255,.18);
+        backdrop-filter: blur(16px);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        position: relative;
+      }
+      .card::before{
+        content:"";
+        position:absolute;
+        inset:-2px;
+        background:
+          radial-gradient(800px 260px at 20% 10%, rgba(127,183,255,.25), transparent 55%),
+          radial-gradient(700px 260px at 80% 30%, rgba(56,233,165,.14), transparent 60%),
+          radial-gradient(520px 260px at 50% 90%, rgba(255,77,109,.10), transparent 60%);
+        pointer-events:none;
+      }
+      .cardInner{
+        position: relative;
+        padding: 26px 26px 22px;
+      }
+
+      .badge{
+        display:inline-flex;
+        align-items:center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.18);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.88);
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        font-size: 12px;
+      }
+      .badgeDot{
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.95), rgba(255,255,255,.2));
+        box-shadow: 0 0 18px rgba(127,183,255,.65);
+      }
+
+      .profile{
+        margin-top: 18px;
+        display:flex;
+        flex-direction: column;
+        align-items:center;
+        gap: 10px;
+      }
+
+      .avatar{
+        width: 118px;
+        height: 118px;
+        border-radius: 24px;
+        border: 1px solid rgba(255,255,255,.22);
+        background: rgba(255,255,255,.06);
+        box-shadow: 0 10px 40px rgba(0,0,0,.25);
+        object-fit: cover;
+      }
+      .name{
+        margin: 4px 0 0;
+        font-size: 30px;
+        font-weight: 900;
+        letter-spacing: .02em;
+        text-align:center;
+      }
+      .title{
+        font-size: 14px;
+        color: var(--muted);
+        letter-spacing: .03em;
+        text-align:center;
+      }
+
+      .keywords{
+        margin-top: 14px;
+        display:flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content:center;
+      }
+      .kw{
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(215,182,90,.40);
+        background: linear-gradient(180deg, rgba(215,182,90,.18), rgba(215,182,90,.08));
+        color: var(--gold2);
+        font-weight: 900;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        font-size: 12px;
+      }
+
+      .social{
+        margin-top: 18px;
+        display:grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+      .social a{
+        pointer-events:auto;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap: 8px;
+        text-decoration: none;
+        color: rgba(255,255,255,.92);
+        padding: 12px 10px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,.18);
+        background: rgba(255,255,255,.06);
+        transition: transform .08s ease, background .2s ease, border-color .2s ease;
+      }
+      .social a:active{ transform: translateY(1px); }
+      .social a:focus-visible{ outline: none; box-shadow: var(--focus); }
+      .social .tag{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        background: rgba(127,183,255,.18);
+        border: 1px solid rgba(127,183,255,.32);
+        font-weight: 900;
+        font-size: 12px;
+      }
+      .social .label{
+        font-weight: 700;
+        letter-spacing: .02em;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      /* Rules modal */
+      .modal{
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display:none;
+        align-items:center;
+        justify-content:center;
+        padding: 18px;
+        background: rgba(0,0,0,.45);
+      }
+      .modal.open{ display:flex; }
+
+      .modalCard{
+        width: min(620px, 96vw);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.07));
+        border: 1px solid rgba(255,255,255,.18);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 30px 120px rgba(0,0,0,.55);
+        overflow:hidden;
+      }
+      .modalHead{
+        padding: 14px 16px;
+        display:flex;
+        align-items:center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(255,255,255,.14);
+      }
+      .modalHead h2{
+        margin:0;
+        font-size: 16px;
+        letter-spacing: .02em;
+      }
+      .modalBody{
+        padding: 14px 16px 6px;
+        color: rgba(255,255,255,.86);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .ruleList{
+        margin: 10px 0 14px;
+        padding: 0 0 0 18px;
+      }
+      .ruleList li{ margin: 8px 0; }
+      .ruleChip{
+        display:inline-flex;
+        align-items:center;
+        gap: 8px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.16);
+        background: rgba(255,255,255,.06);
+        font-weight: 800;
+        letter-spacing: .01em;
+      }
+      .ruleChip.good{ border-color: rgba(56,233,165,.35); background: rgba(56,233,165,.10); }
+      .ruleChip.bad{ border-color: rgba(255,77,109,.40); background: rgba(255,77,109,.10); }
+      .ruleChip.neutral{ border-color: rgba(127,183,255,.40); background: rgba(127,183,255,.10); }
+
+      .modalFoot{
+        padding: 12px 16px 16px;
+        display:flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      /* Finish overlay */
+      .overlay{
+        position: fixed;
+        inset:0;
+        z-index: 9;
+        display:none;
+        align-items:center;
+        justify-content:center;
+        padding: 20px;
+        background: rgba(0,0,0,.40);
+      }
+      .overlay.open{ display:flex; }
+      .overlayCard{
+        width: min(520px, 94vw);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.07));
+        border: 1px solid rgba(255,255,255,.18);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 30px 120px rgba(0,0,0,.55);
+        padding: 18px 16px;
+        text-align:center;
+      }
+      .overlayTitle{
+        font-size: 18px;
+        font-weight: 900;
+        margin: 6px 0 10px;
+      }
+      .finalRow{
+        color: rgba(255,255,255,.86);
+        font-size: 14px;
+        margin-bottom: 14px;
+      }
+      .finalRow b{
+        font-size: 26px;
+      }
+
+      /* Mobile tweaks */
+      @media (max-width: 520px){
+        .hud{ top: 10px; right: 10px; width: calc(100vw - 20px); }
+        .hud .stats{ padding: 10px 12px 9px; gap: 10px; }
+        .stat .value{ font-size: 16px; }
+        .hud .actions{ padding: 9px 12px 12px; gap: 8px; }
+        .hud .actions button{ padding: 10px 10px; }
+
+        .cardInner{ padding: 18px 16px 16px; }
+        .avatar{ width: 86px; height: 86px; border-radius: 18px; }
+        .name{ font-size: 22px; }
+        .title{ font-size: 13px; }
+
+        .social{ grid-template-columns: repeat(2, 1fr); }
+        .social a{ padding: 12px 8px; }
+        .social .label{ font-size: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="bgCanvas"></canvas>
+
+      <!-- Language switcher (top-left) -->
+      <div class="lang-switch" id="langSwitch" aria-label="Language switcher">
+        <button type="button" data-lang="zh-Hant" class="active">繁體中文</button>
+        <button type="button" data-lang="en">English</button>
+        <button type="button" data-lang="ja">日本語</button>
+      </div>
+
+      <!-- HUD (top-right) -->
+      <div class="hud">
+        <div class="panel">
+          <div class="stats">
+            <div class="stat">
+              <span class="label" data-i18n="scoreLabel">Score</span>
+              <span id="scoreValue" class="value">0</span>
+            </div>
+            <div class="stat">
+              <span class="label" data-i18n="timeLabel">Time</span>
+              <span id="timeValue" class="value">30s</span>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" id="rulesBtn" class="ghost" data-i18n="rulesBtn">Rules</button>
+            <button type="button" id="startBtn" class="primary" data-i18n="startBtnIdle">Start</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center business card -->
+      <div class="cardWrap">
+        <div class="card" role="region" aria-label="Digital business card">
+          <div class="cardInner">
+            <div class="badge">
+              <span class="badgeDot" aria-hidden="true"></span>
+              <span data-i18n="truceZoneBadge">Truce Zone</span>
+            </div>
+
+            <div class="profile">
+              <img
+                class="avatar"
+                alt="Phillip Wang avatar"
+                src="https://lh3.googleusercontent.com/d/13zihoNG6m9PRtnKc7gTkaP_ePMua9WE2"
+              />
+              <div class="name">Phillip Wang</div>
+              <div class="title">Gamification &amp; EduTech Expert</div>
+              <div class="keywords" aria-label="keywords">
+                <div class="kw">GAMIFICATION</div>
+                <div class="kw">EDUTECH</div>
+              </div>
+
+              <!-- Social buttons -->
+              <div class="social" aria-label="social links">
+                <a href="https://www.instagram.com/" target="_blank" rel="noreferrer">
+                  <span class="tag">IG</span>
+                  <span class="label" data-i18n="instagramBtn">Instagram</span>
+                </a>
+                <a href="https://www.facebook.com/" target="_blank" rel="noreferrer">
+                  <span class="tag">FB</span>
+                  <span class="label" data-i18n="facebookBtn">Facebook</span>
+                </a>
+                <a href="https://github.com/" target="_blank" rel="noreferrer">
+                  <span class="tag">GH</span>
+                  <span class="label" data-i18n="githubBtn">GitHub</span>
+                </a>
+                <a href="mailto:" target="_self" rel="noreferrer">
+                  <span class="tag">@</span>
+                  <span class="label" data-i18n="emailBtn">Email</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rules modal -->
+      <div class="modal" id="rulesModal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+        <div class="modalCard">
+          <div class="modalHead">
+            <h2 id="rulesTitle" data-i18n="rulesTitle">Game Rules</h2>
+            <button type="button" id="closeRulesBtn" class="ghost" aria-label="Close">✕</button>
+          </div>
+          <div class="modalBody">
+            <div><span class="ruleChip good" data-i18n="goodChip">Good</span> 🐠 🐡 🐬</div>
+            <ul class="ruleList">
+              <li><span data-i18n="goodRule1">Random +10~+20 points or +3 seconds</span></li>
+            </ul>
+            <div><span class="ruleChip bad" data-i18n="badChip">Bad</span> 🦈 🐙</div>
+            <ul class="ruleList">
+              <li><span data-i18n="badRule1">Random -5~-30 points or -5~-10 seconds</span></li>
+            </ul>
+            <div><span class="ruleChip neutral" data-i18n="neutralChip">Neutral</span> 🐟 🦐</div>
+            <ul class="ruleList">
+              <li><span data-i18n="neutralRule1">No score change; only visual feedback</span></li>
+            </ul>
+            <div style="margin-top:10px">
+              <ul class="ruleList" style="margin-bottom: 0">
+                <li><span data-i18n="controlRule1">Click fish for floating text and scoring during the 30s round</span></li>
+                <li><span data-i18n="controlRule2">Click the background for circular water ripples</span></li>
+                <li><span data-i18n="controlRule3">Click anywhere for bubbles that float upward</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="modalFoot">
+            <button type="button" id="closeRulesBtn2" class="primary" data-i18n="rulesCloseBtn">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Finish overlay -->
+      <div class="overlay" id="finishOverlay" role="dialog" aria-modal="true">
+        <div class="overlayCard">
+          <div class="overlayTitle" data-i18n="gameOverTitle">Game Over</div>
+          <div class="finalRow">
+            <span data-i18n="finalScoreLabel">Final Score:</span>
+            <br />
+            <b id="finalScoreValue">0</b>
+          </div>
+          <button type="button" id="replayBtn" class="primary" data-i18n="replayBtn">Play Again</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        "use strict";
+
+        /** -----------------------------
+         * i18n
+         * ------------------------------*/
+        const STRINGS = {
+          "zh-Hant": {
+            scoreLabel: "分數",
+            timeLabel: "剩餘時間",
+            secondsUnit: "秒",
+            rulesBtn: "規則",
+            startBtnIdle: "開始",
+            startBtnPlaying: "遊戲中",
+            startBtnFinished: "再玩一次",
+            truceZoneBadge: "休戰區 Truce Zone",
+            instagramBtn: "Instagram",
+            facebookBtn: "Facebook",
+            githubBtn: "GitHub",
+            emailBtn: "Email",
+
+            goodChip: "Good",
+            badChip: "Bad",
+            neutralChip: "Neutral",
+            missText: "Miss!",
+            neutralVisualText: "OK",
+
+            rulesTitle: "遊戲規則",
+            goodRule1: "隨機 +10~+20 分 或 +3 秒",
+            badRule1: "隨機 -5~-30 分 或 -5~-10 秒",
+            neutralRule1: "不計分，只顯示視覺回饋",
+            controlRule1: "點魚會在 30 秒回合中顯示漂浮文字並進行加/減分或時間",
+            controlRule2: "點背景會出現圓形水波紋",
+            controlRule3: "點任何地方都會有氣泡往上漂浮",
+            rulesCloseBtn: "關閉",
+
+            gameOverTitle: "遊戲結束",
+            finalScoreLabel: "最終分數",
+            replayBtn: "再玩一次",
+          },
+          "en": {
+            scoreLabel: "Score",
+            timeLabel: "Time Left",
+            secondsUnit: "s",
+            rulesBtn: "Rules",
+            startBtnIdle: "Start",
+            startBtnPlaying: "Playing",
+            startBtnFinished: "Play Again",
+            truceZoneBadge: "Truce Zone",
+            instagramBtn: "Instagram",
+            facebookBtn: "Facebook",
+            githubBtn: "GitHub",
+            emailBtn: "Email",
+
+            goodChip: "Good",
+            badChip: "Bad",
+            neutralChip: "Neutral",
+            missText: "Miss!",
+            neutralVisualText: "OK",
+
+            rulesTitle: "Game Rules",
+            goodRule1: "Random +10~+20 points or +3 seconds",
+            badRule1: "Random -5~-30 points or -5~-10 seconds",
+            neutralRule1: "No score change; only visual feedback",
+            controlRule1: "Click fish for floating text and scoring during the 30s round",
+            controlRule2: "Click the background for circular water ripples",
+            controlRule3: "Click anywhere for bubbles that float upward",
+            rulesCloseBtn: "Close",
+
+            gameOverTitle: "Game Over",
+            finalScoreLabel: "Final Score",
+            replayBtn: "Play Again",
+          },
+          "ja": {
+            scoreLabel: "スコア",
+            timeLabel: "残り時間",
+            secondsUnit: "秒",
+            rulesBtn: "ルール",
+            startBtnIdle: "開始",
+            startBtnPlaying: "プレイ中",
+            startBtnFinished: "もう一度",
+            truceZoneBadge: "トゥルース・ゾーン",
+            instagramBtn: "Instagram",
+            facebookBtn: "Facebook",
+            githubBtn: "GitHub",
+            emailBtn: "Email",
+
+            goodChip: "Good",
+            badChip: "Bad",
+            neutralChip: "Neutral",
+            missText: "Miss!",
+            neutralVisualText: "OK",
+
+            rulesTitle: "ゲームのルール",
+            goodRule1: "ランダムで +10~+20pt または +3秒",
+            badRule1: "ランダムで -5~-30pt または -5~-10秒",
+            neutralRule1: "得点なし。見た目の演出のみ",
+            controlRule1: "魚をタップすると 30秒ラウンド中に加減点・演出が出ます",
+            controlRule2: "背景をタップすると円形の水しぶきが出ます",
+            controlRule3: "どこをタップしても泡が上に浮かびます",
+            rulesCloseBtn: "閉じる",
+
+            gameOverTitle: "ゲーム終了",
+            finalScoreLabel: "最終スコア",
+            replayBtn: "もう一度",
+          }
+        };
+
+        const langSwitch = document.getElementById("langSwitch");
+        const allI18nEls = Array.from(document.querySelectorAll("[data-i18n]"));
+
+        /** -----------------------------
+         * Game state
+         * ------------------------------*/
+        const GameState = { Idle: "Idle", Playing: "Playing", Finished: "Finished" };
+        const GAME_DURATION_MS = 30000;
+
+        let state = GameState.Idle;
+        let score = 0;
+        let timeRemainingMs = GAME_DURATION_MS;
+
+        /** -----------------------------
+         * DOM refs
+         * ------------------------------*/
+        const scoreValue = document.getElementById("scoreValue");
+        const timeValue = document.getElementById("timeValue");
+        const rulesBtn = document.getElementById("rulesBtn");
+        const startBtn = document.getElementById("startBtn");
+        const rulesModal = document.getElementById("rulesModal");
+        const closeRulesBtn = document.getElementById("closeRulesBtn");
+        const closeRulesBtn2 = document.getElementById("closeRulesBtn2");
+        const finishOverlay = document.getElementById("finishOverlay");
+        const finalScoreValue = document.getElementById("finalScoreValue");
+        const replayBtn = document.getElementById("replayBtn");
+
+        /** -----------------------------
+         * Canvas simulation
+         * ------------------------------*/
+        const canvas = document.getElementById("bgCanvas");
+        const ctx = canvas.getContext("2d", { alpha: true });
+
+        // HiDPI safe resize
+        let cw = 0, ch = 0, dpr = 1;
+        function resizeCanvas(){
+          dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+          cw = Math.floor(window.innerWidth);
+          ch = Math.floor(window.innerHeight);
+          canvas.width = Math.floor(cw * dpr);
+          canvas.height = Math.floor(ch * dpr);
+          canvas.style.width = cw + "px";
+          canvas.style.height = ch + "px";
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          fishFontPx = Math.max(16, Math.min(28, Math.round(Math.min(cw, ch) * 0.035)));
+          bubbleFontPx = Math.max(12, Math.min(20, Math.round(fishFontPx * 0.62)));
+          // Ensure reasonable play area
+          worldPadding = Math.max(40, Math.round(Math.min(cw, ch) * 0.08));
+        }
+
+        window.addEventListener("resize", resizeCanvas, { passive: true });
+
+        // Derived values based on size
+        let fishFontPx = 20;
+        let bubbleFontPx = 14;
+        let worldPadding = 60;
+
+        // Simulation objects
+        const fish = [];
+        const ripples = [];
+        const floatingTexts = [];
+        const bubbles = [];
+        let ambientBubbleAcc = 0;
+
+        const rand = (a, b) => a + Math.random() * (b - a);
+        const irand = (a, b) => Math.floor(rand(a, b + 1));
+
+        function pick(array){
+          return array[Math.floor(Math.random() * array.length)];
+        }
+
+        const FISH_TYPES = {
+          good: { emojis: ["🐠","🐡","🐬"], color: getCSS("--good") },
+          bad: { emojis: ["🦈","🐙"], color: getCSS("--bad") },
+          neutral: { emojis: ["🐟","🦐"], color: getCSS("--neutral") }
+        };
+
+        // Small helper to read CSS vars into JS for colors
+        function getCSS(varName){
+          return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || "#fff";
+        }
+
+        function spawnFish(type){
+          const y = rand(worldPadding, ch - worldPadding * 0.9);
+          const x = Math.random() < 0.5 ? -40 : cw + 40;
+          const dir = x < 0 ? 1 : -1;
+          const speed = rand(20, 55) * (type === "neutral" ? 0.85 : 1);
+          const wobble = rand(0.6, 1.4);
+          const size = rand(0.9, 1.15);
+          const emoji = pick(FISH_TYPES[type].emojis);
+          fish.push({
+            id: cryptoRandomId(),
+            type,
+            emoji,
+            x,
+            y,
+            vx: dir * speed,
+            vy: rand(-10, 10),
+            rot: rand(-0.2, 0.2),
+            wobble,
+            size,
+            radius: fishFontPx * 0.42 * size,
+            respawnUntil: 0,
+            pulseUntil: 0
+          });
+        }
+
+        function cryptoRandomId(){
+          // Minimal uniqueness for objects in this page
+          return Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
+        }
+
+        function resetWorld(){
+          fish.length = 0;
+          ripples.length = 0;
+          floatingTexts.length = 0;
+          bubbles.length = 0;
+          ambientBubbleAcc = 0;
+
+          // Fish count scales with screen size, but keep manageable.
+          const base = Math.round(Math.min(22, Math.max(14, (cw * ch) / 320000)));
+          const goodCount = Math.round(base * 0.45);
+          const badCount = Math.round(base * 0.25);
+          const neutralCount = Math.max(1, base - goodCount - badCount);
+
+          for(let i=0;i<goodCount;i++) spawnFish("good");
+          for(let i=0;i<badCount;i++) spawnFish("bad");
+          for(let i=0;i<neutralCount;i++) spawnFish("neutral");
+        }
+
+        /** -----------------------------
+         * Pointer interaction
+         * ------------------------------*/
+        function getCanvasPointFromEvent(e){
+          const rect = canvas.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          return { x, y };
+        }
+
+        function isInteractiveElement(target){
+          if(!target) return false;
+          // Prevent game feedback (ripples/miss text) on UI controls.
+          return !!target.closest("button, a, input, textarea, select, [data-ui='true']");
+        }
+
+        function addBubblesAt(x, y, count){
+          // Spawn bubbles that float upward with slight drift.
+          for(let i=0;i<count;i++){
+            bubbles.push({
+              x: x + rand(-16, 16),
+              y: y + rand(-8, 8),
+              vx: rand(-12, 12),
+              vy: rand(-80, -140), // upward
+              r: rand(2.2, 5.6),
+              life: rand(0.65, 1.15),
+              age: 0,
+              hue: rand(190, 220)
+            });
+          }
+        }
+
+        function addRipple(x, y){
+          ripples.push({
+            x,
+            y,
+            t0: performance.now(),
+            duration: 1200 + Math.random() * 700,
+            strength: rand(0.6, 1.0)
+          });
+        }
+
+        function addFloatingText(x, y, text, color){
+          floatingTexts.push({
+            x, y,
+            text,
+            color,
+            t0: performance.now(),
+            duration: 900 + Math.random() * 350,
+            driftX: rand(-18, 18),
+            driftY: rand(-60, -95),
+            scale: rand(0.98, 1.08)
+          });
+        }
+
+        function findFishAt(x, y){
+          // Find the closest fish within its clickable radius.
+          let best = null;
+          let bestD2 = Infinity;
+          const now = performance.now();
+          for(const f of fish){
+            if(f.respawnUntil > now) continue;
+            const dx = f.x - x;
+            const dy = f.y - y;
+            const r = f.radius;
+            const d2 = dx*dx + dy*dy;
+            if(d2 <= r*r && d2 < bestD2){
+              bestD2 = d2;
+              best = f;
+            }
+          }
+          return best;
+        }
+
+        // Any tap/click creates bubbles; fish scoring/ripples depend on what was clicked.
+        document.getElementById("app").addEventListener("pointerdown", (e) => {
+          const p = getCanvasPointFromEvent(e);
+          const inBounds = p.x >= 0 && p.y >= 0 && p.x <= cw && p.y <= ch;
+          if(!inBounds) return;
+
+          // Bubbles always on any place, even on UI (but we don't block controls).
+          addBubblesAt(p.x, p.y, 10 + Math.floor(Math.random() * 7));
+
+          const interactive = isInteractiveElement(e.target);
+          if(interactive) return; // don't show ripples/miss text over UI
+
+          const hit = findFishAt(p.x, p.y);
+
+          // Background ripple and miss text when clicking non-fish area.
+          if(!hit){
+            addRipple(p.x, p.y);
+            if(state === GameState.Playing){
+              addFloatingText(
+                p.x,
+                p.y,
+                STRINGS[currentLang].missText,
+                "rgba(255,255,255,.85)"
+              );
+            }
+            return;
+          }
+
+          // Clicking a fish: show feedback + update score/time only during Playing.
+          hit.pulseUntil = performance.now() + 520;
+
+          if(state !== GameState.Playing){
+            // In Idle/Finished: just visual feedback (no scoring changes).
+            return;
+          }
+
+          // Decide Good/Bad/Neutral effects.
+          const now = performance.now();
+          const secUnit = STRINGS[currentLang].secondsUnit;
+          if(hit.type === "good"){
+            const isPoints = Math.random() < 0.6; // slightly bias to points
+            if(isPoints){
+              const pts = irand(10, 20);
+              score += pts;
+              addFloatingText(hit.x, hit.y - 10, "+" + pts, "rgba(56,233,165,.95)");
+            }else{
+              timeRemainingMs = timeRemainingMs + 3000;
+              addFloatingText(hit.x, hit.y - 10, "+3" + secUnit, "rgba(56,233,165,.95)");
+            }
+            hit.respawnUntil = now + 650;
+          }else if(hit.type === "bad"){
+            const isPoints = Math.random() < 0.45;
+            if(isPoints){
+              const pts = -irand(5, 30);
+              score += pts;
+              addFloatingText(hit.x, hit.y - 10, String(pts), "rgba(255,77,109,.95)");
+            }else{
+              const secs = irand(5, 10);
+              timeRemainingMs = Math.max(0, timeRemainingMs - secs * 1000);
+              addFloatingText(hit.x, hit.y - 10, "-" + secs + secUnit, "rgba(255,77,109,.95)");
+            }
+            hit.respawnUntil = now + 650;
+          }else{
+            // Neutral: no scoring/time change; just visual feedback.
+            addFloatingText(hit.x, hit.y - 10, STRINGS[currentLang].neutralVisualText, "rgba(127,183,255,.95)");
+            hit.pulseUntil = now + 900;
+            // Keep it alive longer; it doesn't have to respawn.
+            if(Math.random() < 0.25) hit.respawnUntil = now + 900;
+          }
+        }, { passive: true });
+
+        /** -----------------------------
+         * Start / Restart
+         * ------------------------------*/
+        function setState(newState){
+          state = newState;
+          renderUI();
+          if(state === GameState.Idle){
+            finishOverlay.classList.remove("open");
+          }
+        }
+
+        function startRound(){
+          score = 0;
+          timeRemainingMs = GAME_DURATION_MS;
+          finishOverlay.classList.remove("open");
+          setState(GameState.Playing);
+        }
+
+        function finishRound(){
+          setState(GameState.Finished);
+          finalScoreValue.textContent = String(score);
+          finishOverlay.classList.add("open");
+        }
+
+        rulesBtn.addEventListener("click", () => {
+          rulesModal.classList.add("open");
+        });
+        closeRulesBtn.addEventListener("click", () => rulesModal.classList.remove("open"));
+        closeRulesBtn2.addEventListener("click", () => rulesModal.classList.remove("open"));
+
+        startBtn.addEventListener("click", () => {
+          if(state === GameState.Playing) return;
+          startRound();
+        });
+
+        replayBtn.addEventListener("click", () => startRound());
+
+        document.addEventListener("keydown", (e) => {
+          if(e.key === "Escape"){
+            rulesModal.classList.remove("open");
+            finishOverlay.classList.remove("open");
+          }
+        });
+
+        /** -----------------------------
+         * UI rendering (score/time/state/lang)
+         * ------------------------------*/
+        let currentLang = "zh-Hant";
+        function applyLanguage(lang){
+          currentLang = lang;
+          const dict = STRINGS[lang] || STRINGS["en"];
+          for(const el of allI18nEls){
+            const key = el.getAttribute("data-i18n");
+            if(dict[key] != null) el.textContent = dict[key];
+          }
+          // Update state-dependent button labels
+          renderUI();
+        }
+
+        function renderUI(){
+          scoreValue.textContent = String(score);
+          const secs = Math.ceil(timeRemainingMs / 1000);
+          timeValue.textContent = secs + STRINGS[currentLang].secondsUnit;
+
+          if(state === GameState.Idle){
+            startBtn.disabled = false;
+            startBtn.textContent = STRINGS[currentLang].startBtnIdle;
+          }else if(state === GameState.Playing){
+            startBtn.disabled = true;
+            startBtn.textContent = STRINGS[currentLang].startBtnPlaying;
+          }else{
+            startBtn.disabled = false;
+            startBtn.textContent = STRINGS[currentLang].startBtnFinished;
+          }
+        }
+
+        // Language button handling
+        langSwitch.addEventListener("click", (e) => {
+          const btn = e.target.closest("button[data-lang]");
+          if(!btn) return;
+          const lang = btn.getAttribute("data-lang");
+          // Highlight active button
+          Array.from(langSwitch.querySelectorAll("button")).forEach(b => b.classList.toggle("active", b === btn));
+          applyLanguage(lang);
+        });
+
+        /** -----------------------------
+         * Drawing helpers
+         * ------------------------------*/
+        function drawBackground(t){
+          // Base gradient
+          const g = ctx.createLinearGradient(0, 0, 0, ch);
+          g.addColorStop(0, "#001a33");
+          g.addColorStop(1, "#000f26");
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, cw, ch);
+
+          // Deep pulse (subtle brightness wave)
+          const pulse = 0.12 + 0.06 * Math.sin(t * 0.0009);
+          ctx.fillStyle = `rgba(120,190,255,${pulse})`;
+          ctx.beginPath();
+          ctx.arc(cw * 0.5, ch * 0.35, Math.min(cw, ch) * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Water flow lines (moving wavefronts)
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          const layers = 7;
+          for(let i=0;i<layers;i++){
+            const y0 = (i + 1) * (ch / (layers + 1));
+            const amp = (6 + i * 1.4) * (cw / 900);
+            const speed = 0.00055 + i * 0.00006;
+            const phase = t * speed + i * 0.8;
+            ctx.strokeStyle = `rgba(100,170,255,${0.14 + i*0.02})`;
+            ctx.lineWidth = 1.1;
+            ctx.beginPath();
+            for(let x=0; x<=cw; x+=28){
+              const y = y0 + Math.sin(phase + x * 0.006) * amp + Math.cos(phase*0.9 + x*0.004) * (amp*0.25);
+              if(x===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        function drawFish(){
+          const now = performance.now();
+          for(const f of fish){
+            if(f.respawnUntil > now){
+              // Invisible while "traveling away"
+              continue;
+            }
+
+            const wob = Math.sin((now * 0.001) * f.wobble + f.x * 0.01) * 4;
+            const lift = Math.sin((now * 0.002) + f.y * 0.01) * 2;
+            const pulse = f.pulseUntil > now ? (0.85 + 0.25 * Math.sin((now - (f.pulseUntil - 520)) * 0.03)) : 1;
+
+            ctx.save();
+            ctx.translate(f.x, f.y + wob + lift);
+            ctx.rotate(f.vx >= 0 ? 0.18 : -0.18);
+            ctx.scale(f.size * pulse, f.size * pulse);
+
+            // Glow behind emoji for readability
+            ctx.font = `${Math.round(fishFontPx)}px ui-sans-serif, system-ui, "Apple Color Emoji", "Segoe UI Emoji"`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            ctx.shadowColor = f.type === "good" ? "rgba(56,233,165,.55)" : (f.type === "bad" ? "rgba(255,77,109,.55)" : "rgba(127,183,255,.45)");
+            ctx.shadowBlur = 16;
+            ctx.fillText(f.emoji, 0, 0);
+            ctx.shadowBlur = 0;
+
+            ctx.restore();
+          }
+        }
+
+        function drawRipples(){
+          const now = performance.now();
+          for(const r of ripples){
+            const age = now - r.t0;
+            if(age < 0 || age > r.duration) continue;
+            const p = age / r.duration; // 0..1
+            const radius = (10 + p * 120) * (0.7 + r.strength);
+            const alpha = (1 - p) * 0.55;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = "rgba(160,220,255,.75)";
+            ctx.lineWidth = 2 - p * 1.2;
+            ctx.beginPath();
+            ctx.arc(r.x, r.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            // secondary ring
+            ctx.globalAlpha = alpha * 0.6;
+            ctx.strokeStyle = "rgba(120,180,255,.55)";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(r.x, r.y, radius * 0.72, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        function drawFloatingTexts(){
+          const now = performance.now();
+          for(const ft of floatingTexts){
+            const age = now - ft.t0;
+            if(age < 0 || age > ft.duration) continue;
+            const p = age / ft.duration;
+            const ease = 1 - Math.pow(1 - p, 3);
+            const x = ft.x + ft.driftX * p;
+            const y = ft.y + ft.driftY * ease;
+            const alpha = (1 - p) * 0.95;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.font = `${Math.round(bubbleFontPx * ft.scale)}px ui-sans-serif, system-ui`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = ft.color;
+            ctx.shadowColor = ft.color;
+            ctx.shadowBlur = 14;
+            ctx.fillText(ft.text, x, y);
+            ctx.restore();
+          }
+        }
+
+        function drawBubbles(dt){
+          // dt in ms
+          for(const b of bubbles){
+            if(b.age > b.life) continue;
+            b.age += dt / 1000;
+            // physics update done in update step; drawing below uses current fields
+            const p = b.age / b.life;
+            const alpha = (1 - p) * 0.70;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = `hsla(${b.hue}, 85%, 75%, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+            ctx.fill();
+            // inner highlight
+            ctx.globalAlpha = alpha * 0.65;
+            ctx.fillStyle = "rgba(255,255,255,.9)";
+            ctx.beginPath();
+            ctx.arc(b.x - b.r*0.25, b.y - b.r*0.25, Math.max(1.1, b.r*0.35), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        function updateBubbles(dt){
+          for(const b of bubbles){
+            if(b.age > b.life) continue;
+            b.x += b.vx * (dt / 1000);
+            b.y += b.vy * (dt / 1000);
+          }
+          // prune dead bubbles
+          for(let i=bubbles.length-1;i>=0;i--){
+            if(bubbles[i].age > bubbles[i].life) bubbles.splice(i,1);
+          }
+        }
+
+        function updateFish(dt){
+          const now = performance.now();
+          for(const f of fish){
+            if(f.respawnUntil > now){
+              // Keep it in "respawning" state; no movement needed.
+              continue;
+            }
+
+            // Movement priority: requestAnimationFrame drives this update.
+            const age = now * 0.001;
+            f.y += f.vy * (dt / 1000);
+            f.y += Math.sin(age + f.wobble) * 10 * (dt / 1000);
+            f.x += f.vx * (dt / 1000);
+
+            // Gentle vertical boundaries
+            const top = worldPadding * 0.75;
+            const bot = ch - worldPadding * 0.65;
+            if(f.y < top){
+              f.y = top;
+              f.vy *= -0.7;
+            }else if(f.y > bot){
+              f.y = bot;
+              f.vy *= -0.7;
+            }
+
+            // Wrap horizontally to keep fish continuously swimming
+            if(f.x < -80) f.x = cw + 80;
+            if(f.x > cw + 80) f.x = -80;
+          }
+
+          // Respawn fish that were "caught"
+          for(const f of fish){
+            if(f.respawnUntil <= now){
+              // no-op
+              continue;
+            }
+          }
+
+          // Actually perform respawn when time passes
+          for(const f of fish){
+            if(f.respawnUntil > 0 && f.respawnUntil <= now){
+              // Place fish back into the water with similar type.
+              const y = rand(worldPadding, ch - worldPadding * 0.9);
+              const x = Math.random() < 0.5 ? -40 : cw + 40;
+              const dir = x < 0 ? 1 : -1;
+              f.x = x;
+              f.y = y;
+              f.vx = dir * rand(20, 55) * (f.type === "neutral" ? 0.85 : 1);
+              f.vy = rand(-10, 10);
+              f.size = rand(0.9, 1.15);
+              f.radius = fishFontPx * 0.42 * f.size;
+              f.pulseUntil = 0;
+              f.respawnUntil = 0;
+            }
+          }
+        }
+
+        function spawnAmbientBubbles(dt){
+          // Low-rate ambient bubbles to enrich background.
+          ambientBubbleAcc += dt;
+          if(ambientBubbleAcc < 450) return;
+          ambientBubbleAcc = 0;
+          const count = irand(1, 3);
+          for(let i=0;i<count;i++){
+            bubbles.push({
+              x: rand(worldPadding * 0.3, cw - worldPadding * 0.3),
+              y: rand(ch * 0.65, ch * 0.95),
+              vx: rand(-20, 20),
+              vy: rand(-70, -120),
+              r: rand(2.0, 4.4),
+              life: rand(0.7, 1.25),
+              age: 0,
+              hue: rand(190, 220)
+            });
+          }
+        }
+
+        /** -----------------------------
+         * Main loop (rAF)
+         * ------------------------------*/
+        let lastT = performance.now();
+        function tick(){
+          const now = performance.now();
+          const dt = Math.min(40, now - lastT); // clamp large jumps
+          lastT = now;
+
+          // Timer update only when playing.
+          if(state === GameState.Playing){
+            timeRemainingMs = Math.max(0, timeRemainingMs - dt);
+            if(timeRemainingMs <= 0){
+              timeRemainingMs = 0;
+              finishRound();
+            }
+          }
+
+          // Update simulation
+          updateFish(dt);
+          updateBubbles(dt);
+          spawnAmbientBubbles(dt);
+
+          // Draw
+          drawBackground(now);
+          drawRipples();
+          drawBubbles(dt); // draws bubbles using updated positions
+          drawFish();
+          drawFloatingTexts();
+
+          // Cleanup expired floating texts and ripples
+          for(let i=floatingTexts.length-1;i>=0;i--){
+            if(now - floatingTexts[i].t0 > floatingTexts[i].duration){
+              floatingTexts.splice(i,1);
+            }
+          }
+          for(let i=ripples.length-1;i>=0;i--){
+            const r = ripples[i];
+            if(now - r.t0 > r.duration) ripples.splice(i,1);
+          }
+
+          // Update HUD at animation frame (simple and ensures "immediate" changes)
+          scoreValue.textContent = String(score);
+          const secs = Math.ceil(timeRemainingMs / 1000);
+          timeValue.textContent = secs + STRINGS[currentLang].secondsUnit;
+
+          requestAnimationFrame(tick);
+        }
+
+        /** -----------------------------
+         * Boot
+         * ------------------------------*/
+        resizeCanvas();
+        resetWorld();
+        applyLanguage(currentLang);
+
+        // Initial UI for Idle state
+        renderUI();
+
+        requestAnimationFrame(tick);
+      })();
+    </script>
+  </body>
+</html>
